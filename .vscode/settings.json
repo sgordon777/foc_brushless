@@ -1,0 +1,9 @@
+{
+    "search.exclude": {
+        "": true
+    },
+    "search.useIgnoreFiles": false,
+    "files.associations": {
+        "*.tcc": "cpp"
+    }
+}
