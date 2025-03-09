@@ -15,19 +15,22 @@
 #define SENSOR_ALIGN_V (0.2)
 
 #define MOTOR_PP (7)
-#define MOTOR_RES (0.1)
-#define MOTOR_K (3000)
+#define MOTOR_RES (0.33)
+#define MOTOR_K (2000)
 #define MOTOR_IND (0.00001)
-#define MOD_FREQ (64000)
+//#define MOD_FREQ (64000)
 #define COMMANDER
 //#define CURSENS
 #define CLOSED_LOOP
 #define MONITOR
-
-
 #define DEB_RETRIG_THRUS_INIT_US (500000)
 #define DEB_RETRIG_THRS_SUS_US (100000)
 
+#define ADC_THROT_INST ADC2
+#define ADC_THROT_CHAN ADC_CHANNEL_4
+#define THROT_CENT (1720.0)
+#define THROT_MAX (2048.0)
+#define THROT_DEADZONE (0.25)
 
 //#define HALL
 //#define ENCODER
@@ -37,7 +40,11 @@
 #include "smoothsensor.h"
 #endif
 
-//#define HB_IO (8)
+
+#define FOC_MAX(a, b) ( (a) > (b) ? (a) : (b) )
+#define FOC_MIN(a, b) ( (a) < (b) ? (a) : (b) )
+
+#define HB_IO (PA5)
 //#define BUT_IO (PA5)
 #ifdef CLOSED_LOOP
 //Encoder sensor = Encoder(PA0, PA1, 100);
@@ -110,8 +117,6 @@ void doInduct(char* cmd) { command.scalar(&motor.phase_inductance, cmd); }
 void doMyval1(char* cmd) { command.scalar(&g_myval1, cmd); }
 void doMyval2(char* cmd) { command.scalar(&g_myval2, cmd); }
 void doscl(char* cmd) { command.scalar(&g_scl, cmd); }
-
-
 #endif 
 
 #ifdef USE_SMOOTHSENSOR
@@ -120,6 +125,10 @@ SmoothingSensor smooth = SmoothingSensor(sensor, motor);
 
 int key_debounce(int butval, int retrig_thresh_init, int retrig_thresh_sus);
 LowPassFilter lpf_throt(0.1);
+ADC_HandleTypeDef hadc1;
+#ifdef ADC_THROT_INST
+static void MX_ADC_Init(void);
+#endif 
 
 
 void setup() {
@@ -289,14 +298,19 @@ void setup() {
   pinMode(BUT_IO, INPUT_PULLUP);
 #endif
 
+#ifdef ADC_THROT_INST
+MX_ADC_Init();
+#endif
+
 }
 
 void loop() 
 {
   static int loopct = 0;
 
-//  digitalWrite(HB_IO, 1);
-
+#ifdef HB_IO
+  digitalWrite(HB_IO, 0);
+#endif
 #ifdef CLOSED_LOOP
   // iterative setting FOC phase voltage
   motor.loopFOC();
@@ -314,10 +328,10 @@ void loop()
   // user communication
   command.run();
 #endif // COMMANDER
-  //digitalWrite(HB_IO, 0);
-  static int flip = 0;
+
 #ifdef BUT_IO
-  int rawval = digitalRead(BUT_IO);
+static int flip = 0;
+int rawval = digitalRead(BUT_IO);
   int butval = key_debounce(1-rawval, DEB_RETRIG_THRUS_INIT_US, DEB_RETRIG_THRS_SUS_US );  
   //Serial.printf("raw=%d, proc=%d\n", rawval, butval);
   if ( butval   )
@@ -328,26 +342,35 @@ void loop()
   }
 #endif // BUT_IO
 
-#if 0
-  // read throttle
-  if (loopct % 1000 == 0)
-  {
-    int adc0 = analogRead(PA_2);
-    float adcf = lpf_throt(adc0);
-    float cmdvel = (adcf - 460) / 512.0;
-    if (g_scl != 0.0)
-    {
-      motor.target = adcf * g_scl;
-    }
-  }
-  //Serial.printf("adc0=%d, x=%d\n", adc0, adc1);
-#endif
-  ++loopct;
+#ifdef ADC_THROT_INST
+ int adc0;
+ HAL_ADC_Start(&hadc1);  // Start conversion
+ HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);  // Wait for conversion ~20us
+ adc0 = HAL_ADC_GetValue(&hadc1);  // Get ADC value
+ float adcf = lpf_throt(adc0);
+ float throt_x = (adcf - THROT_CENT) / THROT_MAX;
+
+
+
+ //Serial.printf("adc=%d, adcf=%d, cmdvel=%d\n", adc0, (int)adcf, (int)cmdvel*2048.0);
+ if (g_scl != 0.0)
+ {
+    if (throt_x > 0)
+      throt_x = FOC_MAX(throt_x - THROT_DEADZONE, 0);
+    else
+      throt_x = FOC_MIN(throt_x + THROT_DEADZONE, 0);
+    motor.target = throt_x * g_scl;
+ }
+ #endif // ADC_THROT_INST
+
+ ++loopct;
 
 
 //  if (loopct % 1000)
 //    float read_pot = _readADCVoltageInline(A_POTENTIOMETER, current_sense.params)*0.305810398;
-
+#ifdef HB_IO
+digitalWrite(HB_IO, 1);
+#endif
 
 }
 
@@ -389,3 +412,50 @@ int key_debounce(int butval, int retrig_thresh_init, int retrig_thresh_sus)
   return output;
 
 }
+
+
+
+#ifdef ADC_THROT_INST
+static void MX_ADC_Init(void)
+{
+  ADC_MultiModeTypeDef multimode = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  hadc1.Instance = ADC_THROT_INST;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.GainCompensation = 0;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.OversamplingMode = DISABLE;
+  
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+             Serial.printf("ERROR:HAL_ADC_Init\n");
+
+    Error_Handler();
+  }
+  sConfig.Channel = ADC_THROT_CHAN;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+                     Serial.printf("ERROR:HAL_ADC_ConfigChannel\n");
+
+    Error_Handler();
+  }
+
+}
+#endif // ADC_THROT_INST
