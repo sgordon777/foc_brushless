@@ -8,14 +8,14 @@
 //#include "MagneticSensorMT6701SSI.h"
 
 #define CONTROL_TYPE (MotionControlType::velocity)
-#define SUPPLY_V (18)
-#define DRIVER_V_LIMIT (18)
-#define MOTOR_V_LIMIT (1)
-#define MOTOR_VEL_LIMIT (25000)
-#define SENSOR_ALIGN_V (0.2)
+#define SUPPLY_V (12)
+#define DRIVER_V_LIMIT (12)
+#define MOTOR_V_LIMIT (0.5)
+#define MOTOR_VEL_LIMIT (250)
+#define SENSOR_ALIGN_V (0.5)
 
 #define MOTOR_PP (7)
-#define MOTOR_RES (0.33)
+#define MOTOR_RES (0.1)
 #define MOTOR_K (2000)
 #define MOTOR_IND (0.00001)
 //#define MOD_FREQ (64000)
@@ -26,11 +26,12 @@
 #define DEB_RETRIG_THRUS_INIT_US (500000)
 #define DEB_RETRIG_THRS_SUS_US (100000)
 
+// PA7 = ADC2, CHAN4
 #define ADC_THROT_INST ADC2
 #define ADC_THROT_CHAN ADC_CHANNEL_4
 #define THROT_CENT (1720.0)
 #define THROT_MAX (2048.0)
-#define THROT_DEADZONE (0.25)
+#define THROT_DEADZONE (0.1)
 
 //#define HALL
 //#define ENCODER
@@ -48,8 +49,8 @@
 //#define BUT_IO (PA5)
 #ifdef CLOSED_LOOP
 //Encoder sensor = Encoder(PA0, PA1, 100);
-//STM32HWEncoder sensor = STM32HWEncoder(1024, PA_0, PA_1);  // nucleo64-g474, zero overhead encoder: nucleo64
-STM32HWEncoder sensor = STM32HWEncoder(1024, PA_11_ALT2, PA_12_ALT1);  // nucleo32-g431
+STM32HWEncoder sensor = STM32HWEncoder(1024, PA_0, PA_1);  // nucleo64-g474, zero overhead encoder: nucleo64
+//STM32HWEncoder sensor = STM32HWEncoder(1024, PA_11_ALT2, PA_12_ALT1);  // nucleo32-g431
 //STM32HWEncoder sensor = STM32HWEncoder(1024, PB_6, PB_7_ALT1);  // disco-STM32G431CB
 //MagneticSensorSPI sensor = MagneticSensorSPI(my_AS5147_SPI, 10); // MOSI=11, MISO=12, CSK=13
 //MagneticSensorSPI sensor = MagneticSensorSPI(AS5147_SPI, 10); // MOSI=11, MISO=12, CSK=13. For some reason, AS5048_SPI doesnt work
@@ -67,12 +68,13 @@ AS5600 as5600(&Wire);   //  use default Wire
 BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES, MOTOR_K, MOTOR_IND); // uni motor
 //BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES, MOTOR_K); // uni motor
 //BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES); // uni motor
+//BLDCMotor motor = BLDCMotor(2, 1, 300, 0.0033); // tool motor
 //BLDCMotor motor = BLDCMotor(7, 11, 3000, 0.00001); // 2204-2300KV
 //BLDCMotor motor = BLDCMotor(7); // 2204-2300KV
 //BLDCMotor motor = BLDCMotor(7, 7.5, 90, 0.0018); // 2204-260KV
 //BLDCMotor motor = BLDCMotor(7, 7.5, 90, 0.0018); // 2208
 //BLDCMotor motor = BLDCMotor(7, 15, 22, 0.0018); // 2208
-//BLDCMotor motor = BLDCMotor(4, 0.34, 250, 0.0005); // 42bls02
+//BLDCMotor motor = BLDCMotor(4, 0.34, 250, 0.005); // 42bls02
 //BLDCMotor motor = BLDCMotor(3, 0.1, 300); // big motor
 //BLDCMotor motor = BLDCMotor(7, 0.1, 3000, 0.00001); // rs2205
 //BLDCMotor motor = BLDCMotor(7, 0.1, 1400, 0.00001); // D3536
@@ -83,8 +85,8 @@ BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES, MOTOR_K, MOTOR_IND); // uni mot
 //BLDCMotor motor = BLDCMotor(15, 0.4, 28); // hub
 
 // driver
-//BLDCDriver3PWM driver = BLDCDriver3PWM(PC0, PC1, PC2, PC3); // 8301/2 with simplified wiring
-BLDCDriver3PWM driver = BLDCDriver3PWM(PA6, PA4, PB0, PB5); // nucleo32-g431
+BLDCDriver3PWM driver = BLDCDriver3PWM(PC0, PC1, PC2, PC3); // nucleo64-g474
+//BLDCDriver3PWM driver = BLDCDriver3PWM(PA6, PA4, PB0, PB5); // nucleo32-g431
 //BLDCDriver6PWM driver = BLDCDriver6PWM(PA8, PC13, PA9, PA12, PA10, PB15);   // disco-STM32G431CB
 //StepperDriver4PWM driver = StepperDriver4PWM(PC0, PC1, PC2, PC3);
 #ifdef CURSENS
@@ -107,6 +109,7 @@ void doC(){sensor.handleC();}
 float g_myval1 = 6.283;
 float g_myval2 = -6.283;
 float g_scl = 0;
+float vlim_slop = 0.0;
 // commander communication instance
 Commander command = Commander(Serial);
 // void doMotor(char* cmd) { command.motor(&motor, cmd); }
@@ -117,6 +120,7 @@ void doInduct(char* cmd) { command.scalar(&motor.phase_inductance, cmd); }
 void doMyval1(char* cmd) { command.scalar(&g_myval1, cmd); }
 void doMyval2(char* cmd) { command.scalar(&g_myval2, cmd); }
 void doscl(char* cmd) { command.scalar(&g_scl, cmd); }
+void dovlim(char* cmd) { command.scalar(&vlim_slop, cmd); }
 #endif 
 
 #ifdef USE_SMOOTHSENSOR
@@ -203,7 +207,7 @@ void setup() {
 #ifdef CLOSED_LOOP
   // velocity loop PID
   motor.PID_velocity.P = 0.033;
-  motor.PID_velocity.I = 0.1;
+  motor.PID_velocity.I = .25;
   motor.PID_velocity.D = 0.0;
   motor.PID_velocity.output_ramp = 0.0;
   motor.PID_velocity.limit = 1000.0;
@@ -284,6 +288,7 @@ void setup() {
   command.add('X', doMyval1, "delta_val1");
   command.add('Y', doMyval2, "delta_val2");
   command.add('Z', doscl, "sclval");
+  command.add('W', dovlim, "vslop");
   command.add('M',doMotor,"motor");
 #endif
 
@@ -343,22 +348,28 @@ int rawval = digitalRead(BUT_IO);
 #endif // BUT_IO
 
 #ifdef ADC_THROT_INST
- int adc0;
- HAL_ADC_Start(&hadc1);  // Start conversion
- HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);  // Wait for conversion ~20us
- adc0 = HAL_ADC_GetValue(&hadc1);  // Get ADC value
- float adcf = lpf_throt(adc0);
- float throt_x = (adcf - THROT_CENT) / THROT_MAX;
+  int adc0;
+  HAL_ADC_Start(&hadc1);  // Start conversion
+  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);  // Wait for conversion ~20us
+  adc0 = HAL_ADC_GetValue(&hadc1);  // Get ADC value
+  float adcf = lpf_throt(adc0);
+  float throt_x = (adcf - THROT_CENT) / THROT_MAX;
+  if (throt_x > 0)
+    throt_x = FOC_MAX(throt_x - THROT_DEADZONE, 0);
+  else
+    throt_x = FOC_MIN(throt_x + THROT_DEADZONE, 0);
 
-
+#ifndef CLOSED_LOOP
+  if (vlim_slop != 0.0)
+  {
+    float motor_vlim = fabs(throt_x * vlim_slop);
+    motor.voltage_limit = motor_vlim;
+  }
+#endif // CLOSED_LOOP
 
  //Serial.printf("adc=%d, adcf=%d, cmdvel=%d\n", adc0, (int)adcf, (int)cmdvel*2048.0);
  if (g_scl != 0.0)
  {
-    if (throt_x > 0)
-      throt_x = FOC_MAX(throt_x - THROT_DEADZONE, 0);
-    else
-      throt_x = FOC_MIN(throt_x + THROT_DEADZONE, 0);
     motor.target = throt_x * g_scl;
  }
  #endif // ADC_THROT_INST
