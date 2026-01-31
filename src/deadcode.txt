@@ -1,0 +1,123 @@
+
+/*
+#ifdef USE_DRV8301
+  if (digitalRead(7) == 0)
+  {
+    int reg1, reg2, reg3, reg4, fault;
+    //while(1)
+    {
+      //gate_driver.get_regs(&reg1, &reg2, &reg3, &reg4);
+      fault = gate_driver.is_fault();
+      sprintf(msgbuf, "DRV8301 FAULT: fault=%x, STATREG1=0x%.4x, STATREG2=0x%.4x, CTRLREG1=0x%.4x, CTRLREG2=0x%.4x", fault, reg1, reg2, reg3, reg4);
+      Serial.println(msgbuf);
+      _delay(5000);
+    }
+
+  }
+#endif // USE_DRV8301
+*/
+
+#ifdef HIGHPERF_MEAS
+  command.add('D', dodnscl, "dnscl");
+#endif
+#ifdef HIGHPERF_MEAS
+void dodnscl(char* cmd) { command.scalar(&HIGHPERF_DOWNSAMPLE, cmd); }
+#endif // HIGHPERF_MEAS
+#ifdef HIGHPERF_MEAS
+HardwareSerial Serial1(USART1);
+#define PIN_SERIAL1_TX PC4
+#define PIN_SERIAL1_RX PC5
+float HIGHPERF_DOWNSAMPLE = 1000.0;
+unsigned highperf_ds = HIGHPERF_DOWNSAMPLE;
+#endif
+// setup
+#ifdef HIGHPERF_MEAS  
+  Serial1.setTx(PIN_SERIAL1_TX);
+  Serial1.setRx(PIN_SERIAL1_RX);  
+  Serial1.begin(3000000);
+  // Enable trace + cycle counter
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+#endif
+  
+#ifdef HIGHPERF_MEAS
+
+  --highperf_ds;
+  if (highperf_ds == 0) 
+  {
+    uint32_t t1 = DWT->CYCCNT;
+    uint32_t pos = (uint32_t) (4096.0 * motor.shaft_angle / (2*PI));
+    //Serial1.printf("%u\n", tdel1);
+
+#if 0
+    float q,d;
+    q = motor.current.q;
+    d = motor.current.d;
+#else
+    PhaseCurrent_s cur;
+    cur = current_sense.getPhaseCurrents();
+#endif
+
+    Serial1.write((uint8_t*)(&t1), 4);
+    Serial1.write((uint8_t*)(&pos), 4);
+#if 0
+    Serial1.write((uint8_t*)(&q), 4);
+    Serial1.write((uint8_t*)(&d), 4);
+#else    
+    Serial1.write((uint8_t*)(&cur.a), 4);
+    Serial1.write((uint8_t*)(&cur.b), 4);
+    Serial1.write((uint8_t*)(&cur.c), 4);
+#endif
+    highperf_ds = (unsigned)HIGHPERF_DOWNSAMPLE;
+  }
+
+#endif
+
+
+#ifdef CLOSED_LOOP
+//Encoder sensor = Encoder(PA0, PA1, 100);
+STM32HWEncoder sensor = STM32HWEncoder(1024, PA_0, PA_1);  // nucleo64-g474, zero overhead encoder: nucleo64
+//STM32HWEncoder sensor = STM32HWEncoder(1024, PA_11_ALT2, PA_12_ALT1);  // nucleo32-g431
+//STM32HWEncoder sensor = STM32HWEncoder(1024, PB_6, PB_7_ALT1);  // disco-STM32G431CB
+//MagneticSensorSPI sensor = MagneticSensorSPI(my_AS5147_SPI, 10); // MOSI=11, MISO=12, CSK=13
+//MagneticSensorSPI sensor = MagneticSensorSPI(AS5147_SPI, 10); // MOSI=11, MISO=12, CSK=13. For some reason, AS5048_SPI doesnt work
+//MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C); 
+//SPISettings MT6701SSISettings_fast(15625000, MT6701_BITORDER, SPI_MODE2); // @suppress("Invalid arguments")
+//MagneticSensorMT6701SSI sensor(10, MT6701SSISettings_fast); // MOSI=11, MISO=12, CSK=13
+
+
+BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES, MOTOR_K, MOTOR_IND); // uni motor
+//BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES, MOTOR_K); // uni motor
+//BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES); // uni motor
+//BLDCMotor motor = BLDCMotor(2, 1, 300, 0.0033); // tool motor
+//BLDCMotor motor = BLDCMotor(7, 11, 3000, 0.00001); // 2204-2300KV
+//BLDCMotor motor = BLDCMotor(7); // 2204-2300KV
+//BLDCMotor motor = BLDCMotor(7, 7.5, 90, 0.0018); // 2204-260KV
+//BLDCMotor motor = BLDCMotor(7, 7.5, 90, 0.0018); // 2208
+//BLDCMotor motor = BLDCMotor(7, 15, 22, 0.0018); // 2208
+//BLDCMotor motor = BLDCMotor(4, 0.34, 250, 0.005); // 42bls02
+//BLDCMotor motor = BLDCMotor(3, 0.1, 300); // big motor
+//BLDCMotor motor = BLDCMotor(7, 0.1, 3000, 0.00001); // rs2205
+//BLDCMotor motor = BLDCMotor(7, 0.1, 1400, 0.00001); // D3536
+//BLDCMotor motor = BLDCMotor(6, 0.25); // tiny motor
+//BLDCMotor motor = BLDCMotor(6, 2, 833); // XBOX DVD motor
+//StepperMotor motor = StepperMotor(50, 2.6, 25, 0.001);
+//BLDCMotor motor = BLDCMotor(15, 0.4, 28, 0.0004); // hub
+//BLDCMotor motor = BLDCMotor(15, 0.4, 28); // hub
+
+
+// driver
+BLDCDriver3PWM driver = BLDCDriver3PWM(PC0, PC1, PC2, PC3); // nucleo64-g474
+//BLDCDriver3PWM driver = BLDCDriver3PWM(PA6, PA4, PB0, PB5); // nucleo32-g431
+//BLDCDriver6PWM driver = BLDCDriver6PWM(PA8, PC13, PA9, PA12, PA10, PB15);   // disco-STM32G431CB
+//StepperDriver4PWM driver = StepperDriver4PWM(PC0, PC1, PC2, PC3);
+#ifdef CURSENS
+// inline current sensor instance
+//InlineCurrentSense current_sense = InlineCurrentSense(0.01f, 50.0f, A0, A2, _NC);
+//LowsideCurrentSense current_sense = LowsideCurrentSense(0.005, 12.2, PA0, PA1, PB14);
+//LowsideCurrentSense current_sense = LowsideCurrentSense(0.005, 12.2, PA0, PA1, PB14);
+LowsideCurrentSense current_sense = LowsideCurrentSense(0.005, 12.2, PA0, PA1, _NC);
+
+#endif
+//LowsideCurrentSense current_sense = LowsideCurrentSense(0.005, 12.2, PA0, PA1, PB14);
