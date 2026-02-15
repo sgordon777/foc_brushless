@@ -1,6 +1,11 @@
-#define MOT_2208
+//#define MOT_42BLS02
+//#define MOT_HUB
+//#define MOT_RS2205
+#define MOT_D3536
+//#define MOT_BIG
 
 #include <Arduino.h>
+
 #include <SimpleFOC.h>
 #include "STM32HWEncoder.h"
 #include <SimpleFOC.h>
@@ -22,10 +27,18 @@
 //#define HALL
 //#define ENCODER
 //#define USE_SMOOTHSENSOR
+//#define HB_IO PA2
 
+#ifdef USE_SMOOTHSENSOR
+#include "smoothsensor.h"
+#endif
 
 #ifdef CLOSED_LOOP
-STM32HWEncoder sensor = STM32HWEncoder(1024, ENC1_A, ENC1_B);  // nucleo32-g431
+#ifdef HALL
+HallSensor sensor = HallSensor(ENC1_A, ENC1_B, ENC1_Z, MOTOR_PP); 
+#else
+STM32HWEncoder sensor = STM32HWEncoder(1024, ENC1_A, ENC1_B);
+#endif // HALL
 #endif // CLOSED_LOOP
 
 #ifdef USE_DRV8301
@@ -71,7 +84,6 @@ char msgbuf[256];
 
 void setup() {
   Serial.begin(921600); // WARNING: low value like 115200 cause distorted FOC
-
 
   // for timer analysis
   SimpleFOCDebug::enable(&Serial);
@@ -138,28 +150,6 @@ void setup() {
   motor.linkCurrentSense(&current_sense);
 #endif // CURSENS
 
-#ifdef CLOSED_LOOP
-  motor.PID_velocity.P = VEL_P; motor.PID_velocity.I = VEL_I; motor.PID_velocity.D = VEL_D; motor.PID_velocity.output_ramp = VEL_R; motor.PID_velocity.limit = VEL_L; motor.LPF_velocity.Tf = VEL_F;
-  motor.P_angle.P = ANG_P;      motor.P_angle.I = ANG_I;      motor.P_angle.D = ANG_D;      motor.P_angle.output_ramp = ANG_R;      motor.P_angle.limit = ANG_L;      motor.LPF_angle.Tf = ANG_F;
-#ifdef CURSENS
-  motor.torque_controller = TorqueControlType::foc_current;
-  // current q loop PID  1/40, 1/40
-  motor.PID_current_q.P = CUR_PQ; motor.PID_current_q.I = CUR_IQ; motor.PID_current_q.D = CUR_DQ; motor.PID_current_q.output_ramp = CUR_RQ; motor.PID_current_q.limit = CUR_LQ; motor.LPF_current_q.Tf = CUR_FQ;
-  // current d loop PID
-  motor.PID_current_d.P = CUR_PD; motor.PID_current_d.I = CUR_ID; motor.PID_current_d.D = CUR_DD; motor.PID_current_d.output_ramp = CUR_RD; motor.PID_current_d.limit = CUR_LD; motor.LPF_current_d.Tf = CUR_FD;
-#endif // CURSENS
-
-#endif // CLOSED_LOOP
-
-  // limts
-  motor.voltage_sensor_align = SENSOR_ALIGN_V;
-  //motor.controller = MotionControlType::torque;
-  motor.controller = CONTROL_TYPE;
-  // default voltage_power_supply
-  motor.velocity_limit = VEL_L;
-  motor.voltage_limit = MOTOR_V_LIMIT;
-  motor.current_limit = MOTOR_I_LIMIT;
-
 //  motor.motion_downsample = 10;
   // set the inital target value
   motor.target = 0;
@@ -173,19 +163,45 @@ void setup() {
   // moduleation mode
   //motor.foc_modulation = SpaceVectorPWM;
   motor.init();
+
+  // limts: MUST BE AFTER motor.init() to take effect
+  motor.voltage_sensor_align = SENSOR_ALIGN_V;
+  //motor.controller = MotionControlType::torque;
+  motor.controller = CONTROL_TYPE;
+  // default voltage_power_supply
+  motor.velocity_limit = MOTOR_VEL_LIMIT;
+  motor.voltage_limit = MOTOR_V_LIMIT;
+  motor.current_limit = MOTOR_I_LIMIT;
+
+  // Tune PID MUST BE AFTER motor.init() to take effect
+#ifdef CLOSED_LOOP
+  motor.PID_velocity.P = VEL_P; motor.PID_velocity.I = VEL_I; motor.PID_velocity.D = VEL_D; motor.PID_velocity.output_ramp = VEL_R; motor.PID_velocity.limit = VEL_L;  motor.LPF_velocity.Tf = VEL_F;
+  motor.P_angle.P =     ANG_P;       motor.P_angle.I = ANG_I;      motor.P_angle.D = ANG_D;      motor.P_angle.output_ramp = ANG_R;      motor.P_angle.limit = ANG_L;     motor.LPF_angle.Tf = ANG_F;
+#ifdef CURSENS
+  motor.torque_controller = TorqueControlType::foc_current;
+  // current q loop PID  1/40, 1/40
+  motor.PID_current_q.P = CUR_PQ; motor.PID_current_q.I = CUR_IQ; motor.PID_current_q.D = CUR_DQ; motor.PID_current_q.output_ramp = CUR_RQ; motor.PID_current_q.limit = CUR_LQ; motor.LPF_current_q.Tf = CUR_FQ;
+  // current d loop PID
+  motor.PID_current_d.P = CUR_PD; motor.PID_current_d.I = CUR_ID; motor.PID_current_d.D = CUR_DD; motor.PID_current_d.output_ramp = CUR_RD; motor.PID_current_d.limit = CUR_LD; motor.LPF_current_d.Tf = CUR_FD;
+#endif // CURSENS
+
+#endif // CLOSED_LOOP
+
+
 #ifdef CLOSED_LOOP
   // align encoder and start FOC
   // for absolute encoder, set zero angle
   //motor.zero_electric_angle = 3.01;
   //motor.sensor_direction = CCW;
   motor.initFOC();
-#endif
+#endif // 
 
 
 #ifdef COMMANDER
   // subscribe motor to the commander
   command.add('L', doLimit, "voltage limit");
   command.add('M',doMotor,"motor");
+  command.verbose = VerboseMode::on_request;
 #endif
 
   Serial.printf("setup complete...\n");
@@ -193,13 +209,14 @@ void setup() {
 
 #ifdef HB_IO
   pinMode(HB_IO, OUTPUT);
-#endif
+#endif // HB_IO
 
 #ifdef BUT_IO
   pinMode(BUT_IO, INPUT_PULLUP);
-#endif
+#endif // BUT_IO
 }
 
+unsigned ctr = 0;
 void loop() 
 {
 #ifdef HB_IO

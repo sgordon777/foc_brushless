@@ -63,7 +63,7 @@
 #elif defined (ARDUINO_NUCLEO_G431RB)
 
 #elif defined (STM32F405xx)
-// driver pionouts
+// ODESCV4_3 : F405+DRV8301
   #define MOT1_AH  PA8
   #define MOT1_BH  PA9
   #define MOT1_CH  PA10
@@ -95,7 +95,9 @@
   #define SPI_MISO PC11
   #define SPI_MOSI PC12
   #define SPI_CS PC13
-
+  #define UART_RX PA0
+  #define UART_TX PA1
+  
 
   // free
 #endif
