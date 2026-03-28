@@ -1,8 +1,14 @@
-//#define MOT_42BLS02
+#define MOT_42BLS02
 //#define MOT_HUB
 //#define MOT_RS2205
-#define MOT_D3536
+//#define MOT_D3536
 //#define MOT_BIG
+//#define MOT_2208
+//#define MOT_TOOL
+//#define MOT_GM5208
+//#define MOT_A2212_10T
+
+#define ODESC23
 
 #include <Arduino.h>
 
@@ -18,10 +24,12 @@
 //#include "MagneticSensorMT6701SSI.h"
 
 #define USE_DRV8301
-//#define HIGHPERF_MEAS
+#define HIGHPERF_MEAS
 #define MOD_FREQ (25000)
 #define COMMANDER
 //#define CURSENS
+#define SHUNT_RNG SHUNT_GAIN_40
+#define SHUNT_GAIN (40)
 #define CLOSED_LOOP
 #define MONITOR
 //#define HALL
@@ -42,7 +50,7 @@ STM32HWEncoder sensor = STM32HWEncoder(1024, ENC1_A, ENC1_B);
 #endif // CLOSED_LOOP
 
 #ifdef USE_DRV8301
-DRV8301 gate_driver = DRV8301(SPI_MOSI, SPI_MISO, SPI_SCK, SPI_CS, MOT1_EN, MOT1_FAULT); // MOSI, MISO, SCLK, CS, EN_GATE, FAULT
+DRV8301 gate_driver = DRV8301(SPI_MOSI, SPI_MISO, SPI_SCK, SPI_M0CS, MOT1_EN, MOT1_FAULT); // MOSI, MISO, SCLK, CS, EN_GATE, FAULT
 #endif //USE_DRV8301
 
 // motor
@@ -53,7 +61,7 @@ BLDCMotor motor = BLDCMotor(MOTOR_PP, MOTOR_RES, MOTOR_K, MOTOR_IND); // uni mot
 BLDCDriver3PWM driver = BLDCDriver3PWM(MOT1_AH, MOT1_BH, MOT1_CH, MOT1_EN);   // disco-STM32G431CB
 
 #ifdef CURSENS
-LowsideCurrentSense current_sense = LowsideCurrentSense(0.0005, 10, MOT1_SO1, MOT1_SO2, MOT1_SO3);
+LowsideCurrentSense current_sense = LowsideCurrentSense(0.0005, SHUNT_GAIN, MOT1_SO1, MOT1_SO2, MOT1_SO3);
 #endif
 
 #ifdef HALL
@@ -75,15 +83,15 @@ void doInduct(char* cmd) { command.scalar(&motor.phase_inductance, cmd); }
 SmoothingSensor smooth = SmoothingSensor(sensor, motor);
 #endif // USE_SMOOTHSENSOR
 
-#ifdef AS5600_CONFIG_REG
 AS5600 as5600(&Wire);   //  use default Wire
+#ifdef AS5600_CONFIG_REG
 #endif
 
 char msgbuf[256];
 
 
 void setup() {
-  Serial.begin(921600); // WARNING: low value like 115200 cause distorted FOC
+  Serial.begin(1000000); // WARNING: low value like 115200 cause distorted FOC
 
   // for timer analysis
   SimpleFOCDebug::enable(&Serial);
@@ -126,7 +134,7 @@ void setup() {
 
 #ifdef USE_DRV8301
   // configure the DRV8301
-  gate_driver.begin(PWM_INPUT_MODE_3PWM, SHUNT_GAIN_10); 
+  gate_driver.begin(PWM_INPUT_MODE_3PWM, SHUNT_RNG); 
   _delay(100);
   int reg1, reg2, reg3, reg4, fault;
   gate_driver.get_regs(&reg1, &reg2, &reg3, &reg4);
@@ -199,7 +207,6 @@ void setup() {
 
 #ifdef COMMANDER
   // subscribe motor to the commander
-  command.add('L', doLimit, "voltage limit");
   command.add('M',doMotor,"motor");
   command.verbose = VerboseMode::on_request;
 #endif

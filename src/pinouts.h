@@ -62,11 +62,11 @@
 #elif defined (ARDUINO_DISCO_B_G431B_ESC1)
 #elif defined (ARDUINO_NUCLEO_G431RB)
 
-#elif defined (STM32F405xx)
-// ODESCV4_3 : F405+DRV8301
-  #define MOT1_AH  PA8
-  #define MOT1_BH  PA9
-  #define MOT1_CH  PA10
+#elif defined (ODESC23)
+ // ODESCV4_3 : 1x fffffF405+DRV8301
+  #define MOT1_AH PA8
+  #define MOT1_BH PA9
+  #define MOT1_CH PA10
   #define MOT1_AL PB13
   #define MOT1_BL PB14
   #define MOT1_CL PB15
@@ -75,14 +75,16 @@
   #define MOT1_SO1 PC0
   #define MOT1_SO2 PC1
   #define MOT1_SO3 _NC
-  #define MOT2_AH  PC6
-  #define MOT2_BH  PC7
-  #define MOT2_CH  PC8
-  #define MOT2_AL  PA7
-  #define MOT2_BL  PB0
-  #define MOT2_CL  PB1
-  
-  #define MOT2_EN PB6
+  #define MOT2_AH PC6
+  #define MOT2_BH PC7
+  #define MOT2_CH PC8
+  #define MOT2_AL PA7
+  #define MOT2_BL PB0
+  #define MOT2_CL PB1
+  #define MOT2_EN  _NC
+  #define MOT2_SO1 PC3
+  #define MOT2_SO2 PC2
+  #define MOT2_SO3 _NC
   // encoder pinouts
   #define ENC1_A PB_4
   #define ENC1_B PB_5
@@ -94,10 +96,11 @@
   #define SPI_SCK PC10
   #define SPI_MISO PC11
   #define SPI_MOSI PC12
-  #define SPI_CS PC13
+  #define SPI_M0CS PC13
+  #define SPI_M1CS PC14
+  // uart
   #define UART_RX PA0
   #define UART_TX PA1
   
-
   // free
 #endif
